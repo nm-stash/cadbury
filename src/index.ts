@@ -52,18 +52,20 @@ export async function runWorkflow(
     );
 
     for await (const output of await streamResults) {
-      if (!output?.__end__) {
+      if (output && typeof output === "object") {
         Object.keys(output).forEach((key) => {
-          const value = output[key];
-          if (value.messages && value.messages.length > 0) {
-            value.messages.forEach((msg: { content: string }) => {
-              messages.push(msg.content);
-              // Extract chart URLs if present
-              const chartUrlMatch = msg.content.match(/https:\/\/[^\s]+/g);
-              if (chartUrlMatch) {
-                chartUrls.push(...chartUrlMatch);
-              }
-            });
+          if (key !== "__end__") {
+            const value = output[key];
+            if (value && value.messages && value.messages.length > 0) {
+              value.messages.forEach((msg: { content: string }) => {
+                messages.push(msg.content);
+                // Extract chart URLs if present
+                const chartUrlMatch = msg.content.match(/https:\/\/[^\s]+/g);
+                if (chartUrlMatch) {
+                  chartUrls.push(...chartUrlMatch);
+                }
+              });
+            }
           }
         });
       }
@@ -118,9 +120,14 @@ export async function* streamWorkflow(
   );
 
   for await (const output of await streamResults) {
-    if (!output?.__end__) {
+    if (output && typeof output === "object") {
       for (const [agentName, value] of Object.entries(output)) {
-        if (value && typeof value === "object" && "messages" in value) {
+        if (
+          agentName !== "__end__" &&
+          value &&
+          typeof value === "object" &&
+          "messages" in value
+        ) {
           const agentOutput = value as { messages: { content: string }[] };
           if (agentOutput.messages && agentOutput.messages.length > 0) {
             for (const msg of agentOutput.messages) {
