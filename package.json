@@ -1,17 +1,49 @@
 {
-  "name": "cadbury",
-  "version": "1.0.1",
+  "name": "@supreme-observer/cadbury",
+  "version": "1.0.0",
+  "private": true,
   "description": "Greetings, esteemed developer! I am Cadbury, your trusty AI butler, inspired by the ever-diligent and resourceful butler of Richie Rich. I am here to serve you in the realm of code, utilizing the latest in Large Language Models (LLMs) to assist with various programming tasks. Whether it's debugging, writing code snippets, or providing insightful suggestions, you can count on me to make your development journey as smooth and efficient as possible. Just install me through npm, and let me take care of the rest. Your coding experience is about to become much more refined.",
-  "main": "index.js",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "require": "./lib/index.js",
+      "import": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "README.md",
+    "USAGE.md",
+    "EXAMPLES.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
-    "start": "ts-node src/index.ts",
-    "prepublishOnly": "npm run build"
+    "clean": "rm -rf lib/",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "npm run build && node scripts/test-build.js",
+    "dev": "ts-node src/example.ts",
+    "type-check": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/supreme-observer/cadbury.git"
   },
+  "keywords": [
+    "ai",
+    "langchain",
+    "langgraph",
+    "multi-agent",
+    "chatbot",
+    "llm",
+    "openai",
+    "butler",
+    "assistant",
+    "automation"
+  ],
   "author": "Nikhil Mishra",
   "license": "MIT",
   "bugs": {
@@ -19,15 +51,20 @@
   },
   "homepage": "https://github.com/supreme-observer/cadbury#readme",
   "dependencies": {
+    "@langchain/community": "^0.2.9",
+    "@langchain/core": "^0.2.9",
     "@langchain/langgraph": "^0.0.21",
+    "@langchain/openai": "^0.1.3",
     "@types/node": "^20.12.12",
     "langchain": "^0.2.4",
-    "typescript": "^5.4.5"
+    "quickchart-js": "^3.1.3",
+    "typescript": "^5.4.5",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "ts-node": "^10.9.2"
   },
   "publishConfig": {
-    "@supreme-observer:registry": "https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com/"
   }
 }
