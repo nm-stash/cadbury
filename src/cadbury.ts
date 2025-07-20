@@ -72,7 +72,7 @@ export class CadburyChain {
   private agentManager: IntelligentAgentManager;
   private currentTaskAnalysis: TaskAnalysis | null = null;
 
-  constructor(config: CadburyConfig = {}) {
+  constructor(config: CadburyConfig) {
     this.config = config;
     this.supervisorName = config.personality?.supervisorName || "Cadbury";
     this.personalityPrompt = this.generatePersonalityPrompt(config.personality);
@@ -178,7 +178,19 @@ You are direct, efficient, and focused on delivering results while maintaining a
     });
 
     // Track input tokens
-    const inputTokens = CostTracker.estimateTokens(formattedMessages.map(m => m.content).join(' '));
+    const inputTokens = CostTracker.estimateTokens(
+      formattedMessages
+        .map((m) =>
+          typeof m.content === "string"
+            ? m.content
+            : Array.isArray(m.content)
+            ? m.content.join(" ")
+            : typeof m.content === "object"
+            ? JSON.stringify(m.content)
+            : String(m.content)
+        )
+        .join(" ")
+    );
 
     const response = await this.llm.invoke(formattedMessages);
 
@@ -214,7 +226,9 @@ You are direct, efficient, and focused on delivering results while maintaining a
     });
 
     // Track input tokens
-    const inputTokens = CostTracker.estimateTokens(formattedMessages.map(m => m.content).join(' '));
+    const inputTokens = CostTracker.estimateTokens(
+      formattedMessages.map((m) => m.content).join(" ")
+    );
 
     const response = await this.llm.invoke(formattedMessages);
 
@@ -254,7 +268,9 @@ You are direct, efficient, and focused on delivering results while maintaining a
     });
 
     // Track input tokens
-    const inputTokens = CostTracker.estimateTokens(formattedMessages.map(m => m.content).join(' '));
+    const inputTokens = CostTracker.estimateTokens(
+      formattedMessages.map((m) => m.content).join(" ")
+    );
 
     const response = await this.llm.invoke(formattedMessages);
 

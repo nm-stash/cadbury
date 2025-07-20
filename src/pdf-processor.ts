@@ -11,8 +11,20 @@ import {
   EmbeddingOptions,
 } from "./types";
 
+// Simple logging utility - no external dependencies
+const createLogger = (enabled: boolean = true) => ({
+  info: (message: string) => enabled && console.log(`[INFO]: ${message}`),
+  warn: (message: string) => enabled && console.warn(`[WARN]: ${message}`),
+  error: (message: string, meta?: any) =>
+    enabled && console.error(`[ERROR]: ${message}`, meta || ""),
+});
+
+const logger = createLogger();
+
 /**
  * Sleep utility function for rate limiting
+ * @param ms - Number of milliseconds to sleep
+ * @returns Promise that resolves after the specified delay
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,7 +93,7 @@ export async function createEmbeddings(
 
       // Calculate exponential backoff delay
       const backoffDelay = retryDelay * Math.pow(2, attempt);
-      console.warn(
+      logger.warn(
         `Rate limit hit. Retrying in ${backoffDelay}ms... (attempt ${
           attempt + 1
         }/${maxRetries + 1})`
@@ -104,6 +116,13 @@ export async function processPDFWithEmbeddings(
   apiKey: string,
   options: PDFProcessingOptions = {}
 ): Promise<PDFProcessingResult> {
+  // Input validation
+  if (!pdfPath || typeof pdfPath !== "string") {
+    throw new Error("PDF path is required and must be a valid string");
+  }
+  if (!apiKey || typeof apiKey !== "string") {
+    throw new Error("OpenAI API key is required and must be a valid string");
+  }
   const {
     chunkSize = 1000,
     overlap = 200,
@@ -113,7 +132,12 @@ export async function processPDFWithEmbeddings(
     maxRetries = 3,
     retryDelay = 2000,
     batchSize = 10,
+    onProgress,
   } = options;
+
+  // Use provided progress callback or fallback to logger
+  const reportProgress =
+    onProgress || ((message: string) => logger.info(message));
 
   try {
     // Load PDF
@@ -134,7 +158,7 @@ export async function processPDFWithEmbeddings(
     const textChunks = await textSplitter.splitText(fullText);
     const totalChunks = textChunks.length;
 
-    console.log(
+    reportProgress(
       `Processing ${totalChunks} chunks with rate limiting (${rateLimitDelay}ms delay between requests)...`
     );
 
@@ -153,7 +177,7 @@ export async function processPDFWithEmbeddings(
       const batchEnd = Math.min(batchStart + batchSize, textChunks.length);
       const batch = textChunks.slice(batchStart, batchEnd);
 
-      console.log(
+      reportProgress(
         `Processing batch ${Math.floor(batchStart / batchSize) + 1}/${Math.ceil(
           textChunks.length / batchSize
         )} (chunks ${batchStart + 1}-${batchEnd})`
@@ -199,10 +223,12 @@ export async function processPDFWithEmbeddings(
             (globalIndex + 1) % 5 === 0 ||
             globalIndex === textChunks.length - 1
           ) {
-            console.log(`Processed ${globalIndex + 1}/${totalChunks} chunks`);
+            reportProgress(
+              `Processed ${globalIndex + 1}/${totalChunks} chunks`
+            );
           }
         } catch (error) {
-          console.error(`Failed to process chunk ${globalIndex + 1}: ${error}`);
+          logger.error(`Failed to process chunk ${globalIndex + 1}: ${error}`);
 
           // If it's a quota error, provide helpful guidance
           if (
@@ -240,7 +266,9 @@ export async function processPDFWithEmbeddings(
       },
     };
   } catch (error) {
-    throw new Error(`Failed to process PDF: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`PDF processing failed: ${errorMessage}`, { error });
+    throw new Error(`Failed to process PDF: ${errorMessage}`);
   }
 }
 
@@ -257,7 +285,7 @@ export async function checkAPIQuota(apiKey: string): Promise<void> {
 
     // Test with a very short text to minimize token usage
     await embeddings.embedQuery("test");
-    console.log("✅ API key is valid and has available quota");
+    logger.info("✅ API key is valid and has available quota");
   } catch (error: any) {
     if (error.message?.includes("quota") || error.message?.includes("429")) {
       throw new Error(
@@ -290,13 +318,17 @@ export async function processPDFWithEmbeddingsResumable(
   await checkAPIQuota(apiKey);
 
   if (startFromChunk > 0) {
-    console.log(`🔄 Resuming processing from chunk ${startFromChunk + 1}`);
+    logger.info(`🔄 Resuming processing from chunk ${startFromChunk + 1}`);
   }
 
-  // Modify the processing to start from a specific chunk
+  // Note: The startFromChunk functionality needs to be implemented in the main processing function
+  // For now, this function serves as a wrapper with quota checking
   const modifiedOptions = {
     ...processingOptions,
-    _startFromChunk: startFromChunk, // Internal flag
+    onProgress:
+      processingOptions.onProgress ||
+      ((msg: string) =>
+        logger.info(startFromChunk > 0 ? `[RESUME] ${msg}` : msg)),
   };
 
   return processPDFWithEmbeddings(pdfPath, apiKey, modifiedOptions);

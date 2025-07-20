@@ -29,7 +29,7 @@ export interface TaskAnalysis {
 }
 
 export interface CadburyConfig {
-  openaiApiKey?: string;
+  openaiApiKey: string; // Required for core functionality
   tavilyApiKey?: string;
   modelName?: string;
   temperature?: number;
@@ -115,6 +115,7 @@ export interface PDFProcessingOptions {
   maxRetries?: number; // Maximum number of retries for each embedding (default: 3)
   retryDelay?: number; // Base delay for exponential backoff in milliseconds (default: 2000)
   batchSize?: number; // Process embeddings in batches (default: 10)
+  onProgress?: (message: string) => void; // Optional progress callback
 }
 
 export interface RAGOptions {

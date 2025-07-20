@@ -28,7 +28,7 @@ export class CadburyWorkflow {
       channels: agentStateChannels,
     });
     this.cadburyChain = new CadburyChain(config);
-    
+
     if (!this.cadburyChain.llm) {
       throw new Error("OpenAI API key is required for CadburyWorkflow");
     }
