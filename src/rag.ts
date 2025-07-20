@@ -104,7 +104,7 @@ export async function queryWithEmbeddings(
   guardRails: GuardRails = {}
 ): Promise<RAGResult> {
   const {
-    model = "gpt-4o-mini",
+    model = "gpt-3.5-turbo",
     temperature = 0,
     maxTokens = 1000,
     topK = 5,

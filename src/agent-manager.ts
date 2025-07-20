@@ -13,7 +13,7 @@ export class IntelligentAgentManager {
     this.config = config;
     this.llm = new ChatOpenAI({
       apiKey: config.openaiApiKey,
-      modelName: config.modelName || "gpt-4",
+      modelName: config.modelName || "gpt-3.5-turbo",
       temperature: config.temperature || 0.1,
     });
 
