@@ -3,14 +3,36 @@ import { HumanMessage } from "@langchain/core/messages";
 import { CadburyWorkflow } from "./graph";
 import { CadburyChain } from "./cadbury";
 import { createAgent } from "./agent";
-import { createChartTool, createTavilyTool } from "./tools";
+import {
+  createTavilyTool,
+  createTextAnalysisTool,
+  createCalculatorTool,
+  createEmbeddingTool,
+  createPDFProcessingTool,
+} from "./tools";
 import {
   CadburyConfig,
+  PersonalityConfig,
   AgentConfig,
   StreamResult,
   CadburyResponse,
   WorkflowOptions,
+  CostInfo,
+  EmbeddingResult,
+  EmbeddingOptions,
+  TextChunk,
+  PDFProcessingResult,
+  PDFProcessingOptions,
+  RAGOptions,
+  RAGResult,
+  GuardRails,
+  WebAutomationConfig,
 } from "./types";
+import { CostTracker } from "./cost-tracker";
+import { createWebAutomationTool } from "./web-automation";
+import { createWebAgent } from "./web-agent";
+import { createEmbeddings, processPDFWithEmbeddings } from "./pdf-processor";
+import { queryWithEmbeddings, findRelevantChunks, SimpleRAG } from "./rag";
 
 /**
  * Creates a new Cadbury AI butler instance
@@ -41,7 +63,6 @@ export async function runWorkflow(
 
   const compiledWorkflow = workflow.getWorkflow();
   const messages: string[] = [];
-  const chartUrls: string[] = [];
 
   if (streaming) {
     const streamResults = compiledWorkflow.stream(
@@ -59,11 +80,6 @@ export async function runWorkflow(
             if (value && value.messages && value.messages.length > 0) {
               value.messages.forEach((msg: { content: string }) => {
                 messages.push(msg.content);
-                // Extract chart URLs if present
-                const chartUrlMatch = msg.content.match(/https:\/\/[^\s]+/g);
-                if (chartUrlMatch) {
-                  chartUrls.push(...chartUrlMatch);
-                }
               });
             }
           }
@@ -81,19 +97,14 @@ export async function runWorkflow(
     if (result.messages) {
       result.messages.forEach((msg: { content: string }) => {
         messages.push(msg.content);
-        // Extract chart URLs if present
-        const chartUrlMatch = msg.content.match(/https:\/\/[^\s]+/g);
-        if (chartUrlMatch) {
-          chartUrls.push(...chartUrlMatch);
-        }
       });
     }
   }
 
   return {
     messages,
-    chartUrls: chartUrls.length > 0 ? chartUrls : undefined,
     isComplete: true,
+    totalCost: workflow.getCostTracker().getTotalCost(),
   };
 }
 
@@ -163,16 +174,113 @@ export async function createCustomAgent(
   return await createAgent(llm, config.tools || [], config.systemPrompt);
 }
 
+/**
+ * Simple synchronous chat interface with Cadbury
+ * This provides an easy way to chat with Cadbury and get the final result
+ * @param workflow The initialized CadburyWorkflow instance
+ * @param message The user's message/request
+ * @returns Promise that resolves to the final response string
+ */
+export async function chatWithCadbury(
+  workflow: CadburyWorkflow,
+  message: string
+): Promise<string> {
+  const response = await runWorkflow(workflow, message);
+
+  // Return only the final response from Cadbury
+  const cadburyResponses = response.messages.filter(
+    (msg) =>
+      msg.includes("Cadbury") || msg.includes("plan:") || !msg.includes(":")
+  );
+
+  return (
+    cadburyResponses[cadburyResponses.length - 1] ||
+    response.messages[response.messages.length - 1] ||
+    "I apologize, but I wasn't able to process your request properly."
+  );
+}
+
+/**
+ * Chat with Cadbury and get both response and cost information
+ * @param workflow The initialized CadburyWorkflow instance
+ * @param message The user's message/request
+ * @returns Promise that resolves to response and cost info
+ */
+export async function chatWithCadburyWithCost(
+  workflow: CadburyWorkflow,
+  message: string
+): Promise<{ response: string; cost: any }> {
+  // Reset cost tracker for this conversation
+  workflow.getCostTracker().reset();
+
+  const result = await runWorkflow(workflow, message);
+
+  // Return only the final response from Cadbury
+  const cadburyResponses = result.messages.filter(
+    (msg) =>
+      msg.includes("Cadbury") || msg.includes("plan:") || !msg.includes(":")
+  );
+
+  const response =
+    cadburyResponses[cadburyResponses.length - 1] ||
+    result.messages[result.messages.length - 1] ||
+    "I apologize, but I wasn't able to process your request properly.";
+
+  return {
+    response,
+    cost: result.totalCost,
+  };
+}
+
+/**
+ * Stream responses from Cadbury with real-time updates
+ * @param workflow The initialized CadburyWorkflow instance
+ * @param message The user's message/request
+ * @param onUpdate Callback function called for each update
+ * @returns Promise that resolves when streaming is complete
+ */
+export async function streamCadburyResponse(
+  workflow: CadburyWorkflow,
+  message: string,
+  onUpdate: (content: string, agentName: string, isComplete: boolean) => void
+): Promise<void> {
+  for await (const result of streamWorkflow(workflow, message)) {
+    onUpdate(result.content, result.agentName, result.isComplete);
+  }
+}
+
 // Export all types and classes for advanced usage
 export {
   CadburyWorkflow,
   CadburyChain,
   createAgent,
-  createChartTool,
   createTavilyTool,
+  createTextAnalysisTool,
+  createCalculatorTool,
+  createEmbeddingTool,
+  createPDFProcessingTool,
+  createWebAutomationTool,
+  createWebAgent,
   CadburyConfig,
+  PersonalityConfig,
   AgentConfig,
   StreamResult,
   CadburyResponse,
   WorkflowOptions,
+  CostInfo,
+  EmbeddingResult,
+  EmbeddingOptions,
+  TextChunk,
+  PDFProcessingResult,
+  PDFProcessingOptions,
+  RAGOptions,
+  RAGResult,
+  GuardRails,
+  WebAutomationConfig,
+  CostTracker,
+  createEmbeddings,
+  processPDFWithEmbeddings,
+  queryWithEmbeddings,
+  findRelevantChunks,
+  SimpleRAG,
 };
