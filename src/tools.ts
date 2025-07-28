@@ -45,27 +45,34 @@ export const createTextAnalysisTool = () =>
 export const createCalculatorTool = () =>
   new DynamicStructuredTool({
     name: "calculate",
-    description: "Perform simple mathematical calculations (basic arithmetic operations)",
+    description:
+      "Perform simple mathematical calculations (basic arithmetic operations)",
     schema: z.object({
-      expression: z.string().describe("Mathematical expression with basic operators (+, -, *, /, %, parentheses)"),
+      expression: z
+        .string()
+        .describe(
+          "Mathematical expression with basic operators (+, -, *, /, %, parentheses)"
+        ),
     }),
     func: async ({ expression }) => {
       try {
         // Simple safe evaluation for basic math operations
         // Only allow numbers, operators, parentheses, and whitespace
-        const safeExpression = expression.replace(/[^0-9+\-*/().\s%]/g, '');
-        
+        const safeExpression = expression.replace(/[^0-9+\-*/().\s%]/g, "");
+
         if (!safeExpression || safeExpression !== expression) {
           return "Error: Only basic mathematical operations are supported (+, -, *, /, %, parentheses)";
         }
-        
+
         // Use Function constructor for safe evaluation of simple math
-        const result = Function('"use strict"; return (' + safeExpression + ")")();
-        
-        if (typeof result !== 'number' || !isFinite(result)) {
+        const result = Function(
+          '"use strict"; return (' + safeExpression + ")"
+        )();
+
+        if (typeof result !== "number" || !isFinite(result)) {
           return "Error: Invalid mathematical expression";
         }
-        
+
         return `Calculation result: ${result}`;
       } catch (error) {
         return `Error in calculation: Invalid expression`;

@@ -3,7 +3,14 @@ import { DynamicStructuredTool } from "langchain/tools";
 import { z } from "zod";
 import { WebAutomationConfig } from "./types";
 
-export function createWebAutomationTool(config: WebAutomationConfig = {}) {
+// Extend the config interface to include clickDelay
+export interface ExtendedWebAutomationConfig extends WebAutomationConfig {
+  clickDelay?: number;
+}
+
+export function createWebAutomationTool(
+  config: ExtendedWebAutomationConfig = {}
+) {
   let browser: Browser | null = null;
   let page: Page | null = null;
   const webConfig = {
@@ -12,6 +19,7 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
     viewport: { width: 1920, height: 1080 },
     slowMo: 0,
     devtools: false,
+    clickDelay: 500,
     ...config,
   };
 
@@ -23,8 +31,6 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
         slowMo: webConfig.slowMo,
         devtools: webConfig.devtools,
         args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-background-timer-throttling",
           "--disable-backgrounding-occluded-windows",
@@ -45,8 +51,8 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
   const navigate = async (url: string): Promise<string> => {
     if (!page) throw new Error("Browser not initialized");
 
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-      url = "https://" + url;
+    if (!/^https?:\/\/[^\s/$.?#].[^\s]*$/.test(url)) {
+      throw new Error("Invalid URL");
     }
 
     await page.goto(url, {
@@ -63,6 +69,11 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
     waitForSelector?: string
   ): Promise<string> => {
     if (!page) throw new Error("Browser not initialized");
+
+    // Validate input to prevent injection
+    if (!selector || typeof selector !== 'string') {
+      throw new Error("Invalid selector provided");
+    }
 
     if (waitForSelector) {
       await page.waitForSelector(waitForSelector, {
@@ -92,7 +103,7 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
     }
 
     await element.click();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, webConfig.clickDelay));
 
     return `Successfully clicked element: ${selector}`;
   };
@@ -104,18 +115,30 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
   ): Promise<string> => {
     if (!page) throw new Error("Browser not initialized");
 
-    if (waitForSelector) {
-      await page.waitForSelector(waitForSelector, {
-        timeout: webConfig.timeout,
-      });
+    // Validate input to prevent injection
+    if (!selector || typeof selector !== 'string') {
+      throw new Error("Invalid selector provided");
+    }
+    if (!text || typeof text !== 'string') {
+      throw new Error("Invalid text provided");
     }
 
     await page.waitForSelector(selector, { timeout: webConfig.timeout });
-    await page.focus(selector);
-    await page.keyboard.down("Control");
-    await page.keyboard.press("KeyA");
-    await page.keyboard.up("Control");
-    await page.keyboard.press("Delete");
+    
+    // Clear the field first
+    await page.evaluate((sel) => {
+      const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+        sel
+      );
+      if (el) {
+        el.focus();
+        el.value = '';
+        if (typeof el.select === "function") {
+          el.select();
+        }
+      }
+    }, selector);
+    
     await page.type(selector, text, { delay: 50 });
 
     return `Successfully typed "${text}" into: ${selector}`;
@@ -127,6 +150,11 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
     attributeName?: string
   ): Promise<string> => {
     if (!page) throw new Error("Browser not initialized");
+
+    // Validate input to prevent injection
+    if (!selector || typeof selector !== 'string') {
+      throw new Error("Invalid selector provided");
+    }
 
     await page.waitForSelector(selector, { timeout: webConfig.timeout });
 
@@ -177,6 +205,10 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
     if (!page) throw new Error("Browser not initialized");
 
     if (selector) {
+      // Validate input to prevent injection
+      if (typeof selector !== 'string') {
+        throw new Error("Invalid selector provided");
+      }
       await page.waitForSelector(selector, { timeout: webConfig.timeout });
       await page.evaluate((sel: string) => {
         const element = document.querySelector(sel);
@@ -369,6 +401,7 @@ export function createWebAutomationTool(config: WebAutomationConfig = {}) {
             throw new Error(`Unknown action: ${input.action}`);
         }
       } catch (error: any) {
+        console.error(`Error in web automation: ${error.message}`);
         return `Error: ${error.message}`;
       }
     },
