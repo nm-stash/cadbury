@@ -103,6 +103,10 @@ export interface PDFProcessingResult {
     totalChunks: number;
     chunkSize: number;
     overlap: number;
+    successfulChunks?: number;
+    failedChunks?: number;
+    concurrency?: number;
+    finalRateLimit?: number;
   };
 }
 

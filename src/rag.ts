@@ -101,7 +101,9 @@ export async function queryWithEmbeddings(
   chunks: TextChunk[],
   apiKey: string,
   options: RAGOptions = {},
-  guardRails: GuardRails = {}
+  guardRails: GuardRails = {},
+  skipSimilaritySearch: boolean = false,
+  customPrompt?: string
 ): Promise<RAGResult> {
   const {
     model = "gpt-3.5-turbo",
@@ -119,11 +121,13 @@ export async function queryWithEmbeddings(
     customGuardPrompt,
   } = guardRails;
 
-  // Find relevant chunks
-  const relevantChunks = findRelevantChunks(queryEmbedding, chunks, {
-    topK,
-    similarityThreshold,
-  });
+  // Use pre-filtered chunks if skipSimilaritySearch is true, otherwise perform similarity search
+  const relevantChunks = skipSimilaritySearch
+    ? chunks
+    : findRelevantChunks(queryEmbedding, chunks, {
+        topK,
+        similarityThreshold,
+      });
 
   // Build context from relevant chunks if any are found
   let context = "";
@@ -164,14 +168,20 @@ export async function queryWithEmbeddings(
   // Create system prompt
   let systemPrompt = "";
   if (hasRelevantChunks) {
-    systemPrompt = `You are a helpful AI assistant that answers questions based on provided context. 
-${guardPrompt}Use only the information provided in the context to answer questions. If the context doesn't contain enough information to answer a question, say so clearly.
+    systemPrompt = `${
+      customPrompt
+        ? customPrompt
+        : " You are a helpful AI assistant that answers questions based on provided context."
+    } 
+${guardPrompt} Use the information provided in the context to answer questions. If the context doesn't contain enough information to answer a question, say so clearly.
 
 Context:
 ${context}`;
   } else {
     // No relevant chunks found, allow AI to answer based on its knowledge
-    systemPrompt = `You are a helpful AI assistant. 
+    systemPrompt = `${
+      customPrompt ? customPrompt : "You are a helpful AI assistant."
+    }
 ${guardPrompt}No relevant context was found for this specific query, so please answer based on your general knowledge. Be clear that you're providing a general answer and not information from specific sources.`;
   }
 
@@ -236,15 +246,21 @@ export class SimpleRAG {
   private apiKey: string;
   private options: RAGOptions;
   private guardRails: GuardRails;
+  private skipSimilaritySearch: boolean = false;
+  private customPrompt?: string;
 
   constructor(
     apiKey: string,
     options: RAGOptions = {},
-    guardRails: GuardRails = {}
+    guardRails: GuardRails = {},
+    skipSimilaritySearch: boolean = false,
+    customPrompt?: string
   ) {
     this.apiKey = apiKey;
     this.options = options;
     this.guardRails = guardRails;
+    this.skipSimilaritySearch = skipSimilaritySearch;
+    this.customPrompt = customPrompt;
   }
 
   /**
@@ -279,7 +295,9 @@ export class SimpleRAG {
       this.chunks,
       this.apiKey,
       this.options,
-      this.guardRails
+      this.guardRails,
+      this.skipSimilaritySearch,
+      this.customPrompt
     );
   }
 
@@ -295,5 +313,13 @@ export class SimpleRAG {
    */
   updateOptions(options: RAGOptions): void {
     this.options = { ...this.options, ...options };
+  }
+
+  /**
+   * Enable or disable similarity search
+   * When disabled, chunks passed to addChunks are assumed to be pre-filtered
+   */
+  setSkipSimilaritySearch(skip: boolean): void {
+    this.skipSimilaritySearch = skip;
   }
 }

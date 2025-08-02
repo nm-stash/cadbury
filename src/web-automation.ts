@@ -71,7 +71,7 @@ export function createWebAutomationTool(
     if (!page) throw new Error("Browser not initialized");
 
     // Validate input to prevent injection
-    if (!selector || typeof selector !== 'string') {
+    if (!selector || typeof selector !== "string") {
       throw new Error("Invalid selector provided");
     }
 
@@ -116,15 +116,15 @@ export function createWebAutomationTool(
     if (!page) throw new Error("Browser not initialized");
 
     // Validate input to prevent injection
-    if (!selector || typeof selector !== 'string') {
+    if (!selector || typeof selector !== "string") {
       throw new Error("Invalid selector provided");
     }
-    if (!text || typeof text !== 'string') {
+    if (!text || typeof text !== "string") {
       throw new Error("Invalid text provided");
     }
 
     await page.waitForSelector(selector, { timeout: webConfig.timeout });
-    
+
     // Clear the field first
     await page.evaluate((sel) => {
       const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
@@ -132,13 +132,13 @@ export function createWebAutomationTool(
       );
       if (el) {
         el.focus();
-        el.value = '';
+        el.value = "";
         if (typeof el.select === "function") {
           el.select();
         }
       }
     }, selector);
-    
+
     await page.type(selector, text, { delay: 50 });
 
     return `Successfully typed "${text}" into: ${selector}`;
@@ -152,7 +152,7 @@ export function createWebAutomationTool(
     if (!page) throw new Error("Browser not initialized");
 
     // Validate input to prevent injection
-    if (!selector || typeof selector !== 'string') {
+    if (!selector || typeof selector !== "string") {
       throw new Error("Invalid selector provided");
     }
 
@@ -206,7 +206,7 @@ export function createWebAutomationTool(
 
     if (selector) {
       // Validate input to prevent injection
-      if (typeof selector !== 'string') {
+      if (typeof selector !== "string") {
         throw new Error("Invalid selector provided");
       }
       await page.waitForSelector(selector, { timeout: webConfig.timeout });

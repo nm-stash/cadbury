@@ -31,12 +31,94 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Semaphore class to control concurrent operations
+ */
+class Semaphore {
+  private permits: number;
+  private queue: (() => void)[] = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  async acquire(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.permits > 0) {
+        this.permits--;
+        resolve();
+      } else {
+        this.queue.push(resolve);
+      }
+    });
+  }
+
+  release(): void {
+    this.permits++;
+    if (this.queue.length > 0) {
+      const next = this.queue.shift();
+      if (next) {
+        this.permits--;
+        next();
+      }
+    }
+  }
+}
+
+/**
+ * Rate limiter with exponential backoff
+ */
+class RateLimiter {
+  private lastRequestTime = 0;
+  private baseDelay: number;
+  private currentDelay: number;
+  private consecutiveErrors = 0;
+  private maxDelay = 10000; // Max 10 seconds
+
+  constructor(baseDelay: number) {
+    this.baseDelay = baseDelay;
+    this.currentDelay = baseDelay;
+  }
+
+  async waitIfNeeded(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+
+    if (timeSinceLastRequest < this.currentDelay) {
+      const waitTime = this.currentDelay - timeSinceLastRequest;
+      await sleep(waitTime);
+    }
+
+    this.lastRequestTime = Date.now();
+  }
+
+  onSuccess(): void {
+    // Gradually reduce delay on successful requests
+    this.consecutiveErrors = 0;
+    this.currentDelay = Math.max(this.baseDelay, this.currentDelay * 0.9);
+  }
+
+  onError(): void {
+    // Exponential backoff on errors
+    this.consecutiveErrors++;
+    this.currentDelay = Math.min(
+      this.maxDelay,
+      this.baseDelay * Math.pow(2, this.consecutiveErrors)
+    );
+  }
+
+  getCurrentDelay(): number {
+    return this.currentDelay;
+  }
+}
+
+/**
  * Creates embeddings for a given text using OpenAI's embedding models with rate limiting and retry logic
  */
 export async function createEmbeddings(
   text: string,
   apiKey: string,
-  options: EmbeddingOptions = {}
+  options: EmbeddingOptions = {},
+  rateLimiter?: RateLimiter
 ): Promise<EmbeddingResult> {
   const {
     model = "text-embedding-3-small",
@@ -60,10 +142,20 @@ export async function createEmbeddings(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // Apply rate limiting if rate limiter is provided
+      if (rateLimiter) {
+        await rateLimiter.waitIfNeeded();
+      }
+
       const result = await embeddings.embedQuery(text);
 
       // Track embedding cost
       costTracker.trackEmbeddingTokens(inputTokens, model);
+
+      // Notify rate limiter of success
+      if (rateLimiter) {
+        rateLimiter.onSuccess();
+      }
 
       return {
         embeddings: result,
@@ -85,6 +177,11 @@ export async function createEmbeddings(
         error.message?.includes("rate limit") ||
         error.message?.includes("quota") ||
         error.status === 429;
+
+      // Notify rate limiter of error
+      if (rateLimiter && isRateLimit) {
+        rateLimiter.onError();
+      }
 
       if (!isRateLimit || attempt === maxRetries) {
         // If it's not a rate limit error or we've exhausted retries, throw the error
@@ -109,7 +206,7 @@ export async function createEmbeddings(
 }
 
 /**
- * Processes a PDF file: extracts text, creates chunks, and generates embeddings with rate limiting
+ * Processes a PDF file: extracts text, creates chunks, and generates embeddings with parallel processing and intelligent rate limiting
  */
 export async function processPDFWithEmbeddings(
   pdfPath: string,
@@ -128,12 +225,16 @@ export async function processPDFWithEmbeddings(
     overlap = 200,
     embeddingModel = "text-embedding-3-small",
     embeddingDimensions,
-    rateLimitDelay = 1000,
+    rateLimitDelay = 100, // Reduced from 1000ms to 100ms for faster processing
     maxRetries = 3,
     retryDelay = 2000,
-    batchSize = 10,
+    batchSize = 20, // Increased from 10 to 20 for better parallelism
     onProgress,
   } = options;
+
+  // Additional options for parallel processing
+  const concurrency = 10; // Number of concurrent requests
+  const adaptiveRateLimit = true; // Enable adaptive rate limiting
 
   // Use provided progress callback or fallback to logger
   const reportProgress =
@@ -159,16 +260,19 @@ export async function processPDFWithEmbeddings(
     const totalChunks = textChunks.length;
 
     reportProgress(
-      `Processing ${totalChunks} chunks with rate limiting (${rateLimitDelay}ms delay between requests)...`
+      `Processing ${totalChunks} chunks with parallel processing (concurrency: ${concurrency}, rate limit: ${rateLimitDelay}ms)...`
     );
 
-    // Initialize cost tracking
+    // Initialize cost tracking and rate limiting
     const costTracker = new CostTracker(embeddingModel);
+    const rateLimiter = new RateLimiter(rateLimitDelay);
+    const semaphore = new Semaphore(concurrency);
 
-    // Generate embeddings for each chunk with rate limiting
+    // Generate embeddings for each chunk with parallel processing
     const chunks: TextChunk[] = [];
+    const errors: Array<{ index: number; error: Error }> = [];
 
-    // Process chunks in batches to avoid overwhelming the API
+    // Process chunks in batches with parallel processing
     for (
       let batchStart = 0;
       batchStart < textChunks.length;
@@ -180,20 +284,30 @@ export async function processPDFWithEmbeddings(
       reportProgress(
         `Processing batch ${Math.floor(batchStart / batchSize) + 1}/${Math.ceil(
           textChunks.length / batchSize
-        )} (chunks ${batchStart + 1}-${batchEnd})`
+        )} (chunks ${
+          batchStart + 1
+        }-${batchEnd}) - Rate limit delay: ${rateLimiter.getCurrentDelay()}ms`
       );
 
-      for (let i = 0; i < batch.length; i++) {
+      // Create promises for parallel processing within the batch
+      const batchPromises = batch.map(async (chunk, i) => {
         const globalIndex = batchStart + i;
-        const chunk = batch[i];
+
+        // Acquire semaphore permit for concurrency control
+        await semaphore.acquire();
 
         try {
-          const embeddingResult = await createEmbeddings(chunk, apiKey, {
-            model: embeddingModel,
-            dimensions: embeddingDimensions,
-            maxRetries,
-            retryDelay,
-          });
+          const embeddingResult = await createEmbeddings(
+            chunk,
+            apiKey,
+            {
+              model: embeddingModel,
+              dimensions: embeddingDimensions,
+              maxRetries,
+              retryDelay,
+            },
+            adaptiveRateLimit ? rateLimiter : undefined
+          );
 
           // Add to cost tracker
           costTracker.trackEmbeddingTokens(
@@ -201,32 +315,21 @@ export async function processPDFWithEmbeddings(
             embeddingModel
           );
 
-          chunks.push({
-            text: chunk,
-            embeddings: embeddingResult.embeddings,
-            metadata: {
-              chunkIndex: globalIndex,
-              totalChunks,
-              // Try to determine page number (approximate)
-              pageNumber:
-                Math.floor((globalIndex / totalChunks) * totalPages) + 1,
+          return {
+            success: true,
+            index: globalIndex,
+            chunk: {
+              text: chunk,
+              embeddings: embeddingResult.embeddings,
+              metadata: {
+                chunkIndex: globalIndex,
+                totalChunks,
+                // Try to determine page number (approximate)
+                pageNumber:
+                  Math.floor((globalIndex / totalChunks) * totalPages) + 1,
+              },
             },
-          });
-
-          // Rate limiting: wait between requests (except for the last chunk)
-          if (globalIndex < textChunks.length - 1) {
-            await sleep(rateLimitDelay);
-          }
-
-          // Progress indicator
-          if (
-            (globalIndex + 1) % 5 === 0 ||
-            globalIndex === textChunks.length - 1
-          ) {
-            reportProgress(
-              `Processed ${globalIndex + 1}/${totalChunks} chunks`
-            );
-          }
+          };
         } catch (error) {
           logger.error(`Failed to process chunk ${globalIndex + 1}: ${error}`);
 
@@ -235,25 +338,118 @@ export async function processPDFWithEmbeddings(
             error instanceof Error &&
             (error.message.includes("quota") || error.message.includes("429"))
           ) {
-            throw new Error(
-              `API quota exceeded while processing chunk ${
-                globalIndex + 1
-              }/${totalChunks}. ` +
-                `Please check your OpenAI billing and usage limits. ` +
-                `You may need to upgrade your plan or wait for quota reset. ` +
-                `Progress saved: ${chunks.length} chunks completed.`
-            );
+            // For quota errors, we'll collect them and handle at the end
+            return {
+              success: false,
+              index: globalIndex,
+              error: new Error(
+                `API quota exceeded while processing chunk ${
+                  globalIndex + 1
+                }/${totalChunks}. ` +
+                  `Please check your OpenAI billing and usage limits. ` +
+                  `You may need to upgrade your plan or wait for quota reset.`
+              ),
+            };
           }
 
-          throw error;
+          return {
+            success: false,
+            index: globalIndex,
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
+        } finally {
+          // Always release the semaphore permit
+          semaphore.release();
+        }
+      });
+
+      // Wait for all promises in the batch to settle
+      const batchResults = await Promise.allSettled(batchPromises);
+
+      // Process results
+      for (let i = 0; i < batchResults.length; i++) {
+        const result = batchResults[i];
+        const globalIndex = batchStart + i;
+
+        if (result.status === "fulfilled") {
+          const { success, chunk, error } = result.value;
+          if (success && chunk) {
+            chunks.push(chunk);
+          } else if (error) {
+            errors.push({ index: globalIndex, error });
+          }
+        } else {
+          // Promise was rejected
+          errors.push({
+            index: globalIndex,
+            error: new Error(`Promise rejected: ${result.reason}`),
+          });
         }
       }
 
-      // Longer delay between batches to be extra safe
+      // Progress indicator
+      const processedSoFar = Math.min(batchEnd, textChunks.length);
+      reportProgress(
+        `Processed ${processedSoFar}/${totalChunks} chunks (${chunks.length} successful, ${errors.length} failed)`
+      );
+
+      // If we have too many errors, especially quota errors, stop processing
+      const quotaErrors = errors.filter(
+        (e) =>
+          e.error.message.includes("quota") || e.error.message.includes("429")
+      );
+
+      if (quotaErrors.length > 0) {
+        throw new Error(
+          `${quotaErrors.length} quota errors encountered. Progress saved: ${chunks.length} chunks completed. ` +
+            `Please check your OpenAI billing and usage limits.`
+        );
+      }
+
+      // Adaptive delay between batches based on error rate
       if (batchEnd < textChunks.length) {
-        await sleep(rateLimitDelay * 2);
+        const errorRate = errors.length / processedSoFar;
+        let batchDelay = rateLimitDelay;
+
+        if (errorRate > 0.1) {
+          // If more than 10% errors, increase delay
+          batchDelay = rateLimitDelay * 3;
+          logger.warn(
+            `High error rate detected (${(errorRate * 100).toFixed(
+              1
+            )}%), increasing batch delay to ${batchDelay}ms`
+          );
+        } else if (
+          errorRate === 0 &&
+          rateLimiter.getCurrentDelay() <= rateLimitDelay
+        ) {
+          // If no errors and rate limiter is not backing off, reduce delay
+          batchDelay = Math.max(50, rateLimitDelay * 0.5);
+        }
+
+        await sleep(batchDelay);
       }
     }
+
+    // If we have any non-quota errors, log them but continue
+    const nonQuotaErrors = errors.filter(
+      (e) =>
+        !e.error.message.includes("quota") && !e.error.message.includes("429")
+    );
+
+    if (nonQuotaErrors.length > 0) {
+      logger.warn(
+        `${nonQuotaErrors.length} chunks failed to process due to non-quota errors. Continuing with ${chunks.length} successful chunks.`
+      );
+      nonQuotaErrors.forEach(({ index, error }) => {
+        logger.error(`Chunk ${index + 1} error: ${error.message}`);
+      });
+    }
+
+    // Sort chunks by index to maintain order
+    chunks.sort(
+      (a, b) => (a.metadata?.chunkIndex ?? 0) - (b.metadata?.chunkIndex ?? 0)
+    );
 
     return {
       chunks,
@@ -263,6 +459,10 @@ export async function processPDFWithEmbeddings(
         totalChunks,
         chunkSize,
         overlap,
+        successfulChunks: chunks.length,
+        failedChunks: errors.length,
+        concurrency,
+        finalRateLimit: rateLimiter.getCurrentDelay(),
       },
     };
   } catch (error) {
