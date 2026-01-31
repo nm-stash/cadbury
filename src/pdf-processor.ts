@@ -1,6 +1,7 @@
 import { OpenAIEmbeddings } from "@langchain/openai";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import * as fs from "fs";
+import pdfParse from "pdf-parse";
 import { CostTracker } from "./cost-tracker";
 import {
   PDFProcessingResult,
@@ -241,13 +242,13 @@ export async function processPDFWithEmbeddings(
     onProgress || ((message: string) => logger.info(message));
 
   try {
-    // Load PDF
-    const loader = new PDFLoader(pdfPath);
-    const docs = await loader.load();
+    // Load PDF directly using pdf-parse (no @langchain/community dependency)
+    const dataBuffer = fs.readFileSync(pdfPath);
+    const pdfData = await pdfParse(dataBuffer);
 
     // Extract text and count pages
-    const fullText = docs.map((doc) => doc.pageContent).join("\n");
-    const totalPages = docs.length;
+    const fullText = pdfData.text;
+    const totalPages = pdfData.numpages;
 
     // Create text splitter
     const textSplitter = new RecursiveCharacterTextSplitter({

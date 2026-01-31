@@ -1,5 +1,5 @@
 import puppeteer, { Browser, Page } from "puppeteer";
-import { DynamicStructuredTool } from "langchain/tools";
+import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { WebAutomationConfig } from "./types";
 
@@ -357,7 +357,7 @@ export function createWebAutomationTool(
         .enum(["up", "down", "top", "bottom"])
         .optional()
         .describe("Direction to scroll"),
-    }),
+    }) as any,
     func: async (input: any): Promise<string> => {
       try {
         await ensureBrowser();

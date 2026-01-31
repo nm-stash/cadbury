@@ -4,11 +4,14 @@ import { CadburyWorkflow } from "./graph";
 import { CadburyChain } from "./cadbury";
 import { createAgent } from "./agent";
 import {
+  createWebSearchTool,
   createTavilyTool,
   createTextAnalysisTool,
   createCalculatorTool,
   createEmbeddingTool,
   createPDFProcessingTool,
+  createMCPClientTool,
+  discoverMCPTools,
 } from "./tools";
 import {
   CadburyConfig,
@@ -27,6 +30,10 @@ import {
   RAGResult,
   GuardRails,
   WebAutomationConfig,
+  DirectAgentOptions,
+  DirectAgentResult,
+  MCPToolConfig,
+  MCPDiscoveredTool,
 } from "./types";
 import { CostTracker } from "./cost-tracker";
 import { createWebAutomationTool } from "./web-automation";
@@ -76,7 +83,7 @@ export async function runWorkflow(
       if (output && typeof output === "object") {
         Object.keys(output).forEach((key) => {
           if (key !== "__end__") {
-            const value = output[key];
+            const value = (output as any)[key];
             if (value && value.messages && value.messages.length > 0) {
               value.messages.forEach((msg: { content: string }) => {
                 messages.push(msg.content);
@@ -94,8 +101,8 @@ export async function runWorkflow(
       { recursionLimit }
     );
 
-    if (result.messages) {
-      result.messages.forEach((msg: { content: string }) => {
+    if (result.messages && Array.isArray(result.messages)) {
+      (result.messages as Array<{ content: string }>).forEach((msg) => {
         messages.push(msg.content);
       });
     }
@@ -249,11 +256,32 @@ export async function streamCadburyResponse(
   }
 }
 
+/**
+ * Run a single agent directly with tools, bypassing the supervisor.
+ * Ideal for user-created agents with pre-defined tool sets.
+ * Does not require initialization of the full workflow graph.
+ * @param config CadburyConfig with API keys and model settings
+ * @param agentConfig Agent configuration (name, systemPrompt, tools)
+ * @param message The task/instruction for the agent
+ * @param options Optional execution options (maxIterations, onToolCall middleware)
+ * @returns DirectAgentResult with output, cost, duration, and tool calls log
+ */
+export async function runDirectAgent(
+  config: CadburyConfig,
+  agentConfig: AgentConfig,
+  message: string,
+  options?: DirectAgentOptions
+): Promise<DirectAgentResult> {
+  const workflow = new CadburyWorkflow(config);
+  return workflow.runAgentDirectly(agentConfig, message, options);
+}
+
 // Export all types and classes for advanced usage
 export {
   CadburyWorkflow,
   CadburyChain,
   createAgent,
+  createWebSearchTool,
   createTavilyTool,
   createTextAnalysisTool,
   createCalculatorTool,
@@ -261,6 +289,8 @@ export {
   createPDFProcessingTool,
   createWebAutomationTool,
   createWebAgent,
+  createMCPClientTool,
+  discoverMCPTools,
   CadburyConfig,
   PersonalityConfig,
   AgentConfig,
@@ -277,6 +307,10 @@ export {
   RAGResult,
   GuardRails,
   WebAutomationConfig,
+  DirectAgentOptions,
+  DirectAgentResult,
+  MCPToolConfig,
+  MCPDiscoveredTool,
   CostTracker,
   createEmbeddings,
   processPDFWithEmbeddings,

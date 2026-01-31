@@ -11,13 +11,18 @@ import { AgentStateChannels, agentStateChannels } from "./state";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { START, StateGraph, END } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
-import { CadburyConfig, AgentConfig } from "./types";
+import {
+  CadburyConfig,
+  AgentConfig,
+  DirectAgentOptions,
+  DirectAgentResult,
+} from "./types";
 
 type NodeName = "cadbury" | "web_agent" | "researcher" | string;
 
 export class CadburyWorkflow {
   private llm: ChatOpenAI;
-  private workflow: StateGraph<AgentStateChannels>;
+  private workflow: any;
   private cadburyChain: CadburyChain;
   private config: CadburyConfig;
   private customAgents: Map<string, any> = new Map();
@@ -26,7 +31,7 @@ export class CadburyWorkflow {
     this.config = config;
     this.workflow = new StateGraph({
       channels: agentStateChannels,
-    });
+    } as any);
     this.cadburyChain = new CadburyChain(config);
 
     if (!this.cadburyChain.llm) {
@@ -51,6 +56,59 @@ export class CadburyWorkflow {
     if (!CadburyChain.members.includes(agentConfig.name)) {
       CadburyChain.members.push(agentConfig.name);
     }
+  }
+
+  /**
+   * Execute a single agent directly without supervisor routing.
+   * Bypasses the multi-agent orchestration for simpler, faster execution.
+   * Ideal for user-created agents with pre-defined tool sets.
+   */
+  public async runAgentDirectly(
+    agentConfig: AgentConfig,
+    message: string,
+    options?: DirectAgentOptions
+  ): Promise<DirectAgentResult> {
+    const startTime = Date.now();
+    this.cadburyChain.costTracker.reset();
+
+    const agent = await createAgent(
+      this.llm,
+      agentConfig.tools || [],
+      agentConfig.systemPrompt,
+      {
+        onToolCall: options?.onToolCall,
+        maxIterations: options?.maxIterations,
+      }
+    );
+
+    const result = await agent.invoke({
+      messages: [new HumanMessage({ content: message })],
+    });
+
+    const output =
+      result.output ||
+      (result.messages && result.messages.length > 0
+        ? typeof result.messages[result.messages.length - 1].content ===
+          "string"
+          ? result.messages[result.messages.length - 1].content
+          : JSON.stringify(result.messages[result.messages.length - 1].content)
+        : "");
+
+    // Extract tool calls from intermediate steps
+    const toolCalls = (result.intermediateSteps || []).map((step: any) => ({
+      tool: step.action?.tool || "unknown",
+      toolInput: step.action?.toolInput || {},
+      observation: typeof step.observation === "string"
+        ? step.observation
+        : JSON.stringify(step.observation || ""),
+    }));
+
+    return {
+      output,
+      cost: this.cadburyChain.costTracker.getTotalCost(),
+      durationMs: Date.now() - startTime,
+      toolCalls,
+    };
   }
 
   private cadburyNode = async (

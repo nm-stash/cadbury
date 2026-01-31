@@ -144,3 +144,37 @@ export interface GuardRails {
   requireCitation?: boolean;
   customGuardPrompt?: string;
 }
+
+// Direct agent execution types (bypasses supervisor routing)
+export interface DirectAgentOptions {
+  recursionLimit?: number; // Default: 50
+  maxIterations?: number; // Max agent iterations before stopping
+  onToolCall?: (toolName: string, input: any) => Promise<boolean>; // Return false to stop execution
+}
+
+export interface DirectAgentResult {
+  output: string;
+  cost: CostInfo;
+  durationMs: number;
+  toolCalls: Array<{
+    tool: string;
+    toolInput: Record<string, any>;
+    observation: string;
+  }>;
+}
+
+// MCP (Model Context Protocol) tool types
+export interface MCPToolConfig {
+  serverUrl: string;
+  toolName: string;
+  description: string;
+  inputSchema: any; // Zod schema for tool parameters
+  authHeaders?: Record<string, string>;
+  timeoutMs?: number; // Default: 30000
+}
+
+export interface MCPDiscoveredTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, any>;
+}

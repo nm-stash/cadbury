@@ -1,6 +1,6 @@
 {
   "name": "@supreme-observer/cadbury",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "private": false,
   "description": "Greetings, esteemed developer! I am Cadbury, your trusty AI butler, inspired by the ever-diligent and resourceful butler of Richie Rich. I am here to serve you in the realm of code, utilizing the latest in Large Language Models (LLMs) to assist with various programming tasks. Whether it's debugging, writing code snippets, or providing insightful suggestions, you can count on me to make your development journey as smooth and efficient as possible. Just install me through npm, and let me take care of the rest. Your coding experience is about to become much more refined.",
   "main": "lib/index.js",
@@ -51,19 +51,19 @@
   },
   "homepage": "https://github.com/supreme-observer/cadbury#readme",
   "dependencies": {
-    "@langchain/community": "^0.2.33",
-    "@langchain/core": "^0.2.36",
-    "@langchain/langgraph": "^0.0.21",
-    "@langchain/openai": "^0.2.11",
-    "@types/node": "^20.12.12",
-    "langchain": "^0.2.20",
+    "@langchain/classic": "^1.0.0",
+    "@langchain/core": "^1.1.18",
+    "@langchain/langgraph": "^1.1.2",
+    "@langchain/openai": "^1.2.4",
+    "@langchain/textsplitters": "^1.0.0",
     "pdf-parse": "^1.1.1",
     "puppeteer": "^23.0.0",
-    "typescript": "^5.4.5",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2"
+    "@types/node": "^20.12.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/",

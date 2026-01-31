@@ -1,5 +1,5 @@
 import { END } from "@langchain/langgraph";
-import { JsonOutputToolsParser } from "langchain/output_parsers";
+import { JsonOutputToolsParser } from "@langchain/core/output_parsers/openai_tools";
 import { ChatOpenAI } from "@langchain/openai";
 import {
   ChatPromptTemplate,
@@ -313,7 +313,7 @@ You are direct, efficient, and focused on delivering results while maintaining a
     const chain = dynamicPrompt
       .pipe(llmWithTools)
       .pipe(new JsonOutputToolsParser())
-      .pipe((x) => x[0].args);
+      .pipe((x: any) => x[0]?.args);
 
     return chain;
   }
