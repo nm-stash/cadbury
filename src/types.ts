@@ -145,17 +145,66 @@ export interface GuardRails {
   customGuardPrompt?: string;
 }
 
-// Direct agent execution types (bypasses supervisor routing)
+// --- Agent Stack: Full execution trace for observability ---
+
+export interface AgentFrame {
+  id: string;
+  type:
+    | "thinking"
+    | "plan"
+    | "tool_call"
+    | "tool_result"
+    | "error"
+    | "response";
+  timestamp: Date;
+  durationMs?: number;
+  content: string;
+  metadata?: {
+    toolName?: string;
+    toolInput?: any;
+    toolOutput?: any;
+    iteration?: number;
+    tokenUsage?: { input: number; output: number };
+  };
+}
+
+export interface AgentStack {
+  frames: AgentFrame[];
+  status: "running" | "completed" | "error";
+  startedAt: Date;
+  completedAt?: Date;
+  totalDurationMs?: number;
+  iterationCount: number;
+  model: string;
+}
+
+// --- Direct agent execution types (bypasses supervisor routing) ---
+
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface DirectAgentOptions {
   recursionLimit?: number; // Default: 50
   maxIterations?: number; // Max agent iterations before stopping
+  conversationHistory?: ConversationMessage[]; // Previous messages for multi-turn context
   onToolCall?: (toolName: string, input: any) => Promise<boolean>; // Return false to stop execution
+  onThinking?: (content: string, iteration: number) => void; // Called when agent reasons before a tool call
+  onToolResult?: (
+    toolName: string,
+    input: any,
+    output: any,
+    durationMs: number
+  ) => void; // Called after each tool execution
+  onFrame?: (frame: AgentFrame) => void; // Catch-all for every frame in the stack
 }
 
 export interface DirectAgentResult {
   output: string;
   cost: CostInfo;
   durationMs: number;
+  stack: AgentStack;
   toolCalls: Array<{
     tool: string;
     toolInput: Record<string, any>;
@@ -178,3 +227,10 @@ export interface MCPDiscoveredTool {
   description: string;
   inputSchema: Record<string, any>;
 }
+
+// Re-export MCP client types for convenience
+export type {
+  MCPClientConfig,
+  MCPServerInfo,
+  MCPToolCallResult,
+} from "./mcp-client";

@@ -2,7 +2,8 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { CadburyWorkflow } from "./graph";
 import { CadburyChain } from "./cadbury";
-import { createAgent } from "./agent";
+import { createAgent, createAgentLoop, createAgentLegacy } from "./agent";
+import type { AgentLoopOptions, AgentLoopResult } from "./agent";
 import {
   createWebSearchTool,
   createTavilyTool,
@@ -12,7 +13,9 @@ import {
   createPDFProcessingTool,
   createMCPClientTool,
   discoverMCPTools,
+  createMCPClient,
 } from "./tools";
+import { MCPClient, MCPClientConfig, MCPServerInfo, MCPToolCallResult } from "./mcp-client";
 import {
   CadburyConfig,
   PersonalityConfig,
@@ -32,6 +35,9 @@ import {
   WebAutomationConfig,
   DirectAgentOptions,
   DirectAgentResult,
+  ConversationMessage,
+  AgentStack,
+  AgentFrame,
   MCPToolConfig,
   MCPDiscoveredTool,
 } from "./types";
@@ -281,6 +287,8 @@ export {
   CadburyWorkflow,
   CadburyChain,
   createAgent,
+  createAgentLoop,
+  createAgentLegacy,
   createWebSearchTool,
   createTavilyTool,
   createTextAnalysisTool,
@@ -291,6 +299,8 @@ export {
   createWebAgent,
   createMCPClientTool,
   discoverMCPTools,
+  createMCPClient,
+  MCPClient,
   CadburyConfig,
   PersonalityConfig,
   AgentConfig,
@@ -309,8 +319,14 @@ export {
   WebAutomationConfig,
   DirectAgentOptions,
   DirectAgentResult,
+  AgentStack,
+  AgentFrame,
+  ConversationMessage,
   MCPToolConfig,
   MCPDiscoveredTool,
+  MCPClientConfig,
+  MCPServerInfo,
+  MCPToolCallResult,
   CostTracker,
   createEmbeddings,
   processPDFWithEmbeddings,
@@ -318,3 +334,6 @@ export {
   findRelevantChunks,
   SimpleRAG,
 };
+
+// Re-export agent loop types
+export type { AgentLoopOptions, AgentLoopResult };

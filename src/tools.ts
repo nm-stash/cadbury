@@ -1,19 +1,101 @@
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+puppeteer.use(StealthPlugin());
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { createEmbeddings, processPDFWithEmbeddings } from "./pdf-processor";
 import { createWebAutomationTool } from "./web-automation";
 import { WebAutomationConfig, MCPToolConfig, MCPDiscoveredTool } from "./types";
+import { MCPClient, MCPClientConfig } from "./mcp-client";
+
+export type SearchEngine = "google" | "duckduckgo";
+
+interface WebSearchConfig {
+  engine?: SearchEngine;
+}
 
 /**
- * Creates a free web search tool using Google via Puppeteer.
- * No API key required - scrapes Google search results directly.
+ * Scrape Google search results from a Puppeteer page.
  */
-export const createWebSearchTool = () =>
+async function scrapeGoogle(
+  page: any,
+  query: string,
+  maxResults: number
+): Promise<Array<{ title: string; url: string; snippet: string }>> {
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 30000 });
+
+  return page.evaluate((max: number) => {
+    const items: Array<{ title: string; url: string; snippet: string }> = [];
+    const searchResults = document.querySelectorAll("div.g");
+
+    searchResults.forEach((result, index) => {
+      if (index >= max) return;
+      const titleEl = result.querySelector("h3");
+      const linkEl = result.querySelector("a");
+      const snippetEl =
+        result.querySelector("div[data-sncf]") ||
+        result.querySelector(".VwiC3b") ||
+        result.querySelector("span.aCOpRe");
+
+      if (titleEl && linkEl) {
+        items.push({
+          title: titleEl.textContent || "",
+          url: linkEl.getAttribute("href") || "",
+          snippet: snippetEl?.textContent || "",
+        });
+      }
+    });
+    return items;
+  }, maxResults);
+}
+
+/**
+ * Scrape DuckDuckGo search results from a Puppeteer page.
+ */
+async function scrapeDuckDuckGo(
+  page: any,
+  query: string,
+  maxResults: number
+): Promise<Array<{ title: string; url: string; snippet: string }>> {
+  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 30000 });
+
+  return page.evaluate((max: number) => {
+    const items: Array<{ title: string; url: string; snippet: string }> = [];
+    const searchResults = document.querySelectorAll(".result");
+
+    searchResults.forEach((result, index) => {
+      if (index >= max) return;
+      const titleEl = result.querySelector(".result__title a");
+      const snippetEl = result.querySelector(".result__snippet");
+
+      if (titleEl) {
+        const href = titleEl.getAttribute("href") || "";
+        const urlMatch = href.match(/uddg=([^&]+)/);
+        const actualUrl = urlMatch ? decodeURIComponent(urlMatch[1]) : href;
+
+        items.push({
+          title: titleEl.textContent?.trim() || "",
+          url: actualUrl,
+          snippet: snippetEl?.textContent?.trim() || "",
+        });
+      }
+    });
+    return items;
+  }, maxResults);
+}
+
+/**
+ * Creates a free web search tool via Puppeteer with stealth.
+ * Supports Google and DuckDuckGo. Defaults to Google with automatic
+ * fallback to DuckDuckGo if Google returns 0 results (e.g. CAPTCHA).
+ */
+export const createWebSearchTool = (config: WebSearchConfig = {}) =>
   new DynamicStructuredTool({
     name: "web_search",
     description:
-      "Search the web using Google. Returns top search results with titles, URLs, and snippets.",
+      "Search the web. Returns top search results with titles, URLs, and snippets.",
     schema: z.object({
       query: z.string().describe("The search query"),
       maxResults: z
@@ -36,38 +118,23 @@ export const createWebSearchTool = () =>
           args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
         const page = await browser.newPage();
-        await page.setUserAgent(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        );
 
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-        await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 30000 });
+        const engine = config.engine || "google";
+        let results: Array<{ title: string; url: string; snippet: string }>;
+        let usedEngine: string;
 
-        // Extract search results
-        const results = await page.evaluate((max: number) => {
-          const items: Array<{ title: string; url: string; snippet: string }> = [];
-          const searchResults = document.querySelectorAll("div.g");
-
-          searchResults.forEach((result, index) => {
-            if (index >= max) return;
-
-            const titleEl = result.querySelector("h3");
-            const linkEl = result.querySelector("a");
-            const snippetEl = result.querySelector("div[data-sncf]") ||
-              result.querySelector(".VwiC3b") ||
-              result.querySelector("span.aCOpRe");
-
-            if (titleEl && linkEl) {
-              items.push({
-                title: titleEl.textContent || "",
-                url: linkEl.getAttribute("href") || "",
-                snippet: snippetEl?.textContent || "",
-              });
-            }
-          });
-
-          return items;
-        }, maxResults);
+        if (engine === "duckduckgo") {
+          results = await scrapeDuckDuckGo(page, query, maxResults);
+          usedEngine = "duckduckgo";
+        } else {
+          // Try Google first, fallback to DuckDuckGo
+          results = await scrapeGoogle(page, query, maxResults);
+          usedEngine = "google";
+          if (results.length === 0) {
+            results = await scrapeDuckDuckGo(page, query, maxResults);
+            usedEngine = "duckduckgo (fallback)";
+          }
+        }
 
         await browser.close();
 
@@ -75,7 +142,8 @@ export const createWebSearchTool = () =>
           return "No search results found.";
         }
 
-        return results
+        const header = `[Source: ${usedEngine} | ${results.length} results]\n\n`;
+        return header + results
           .map(
             (r, i) =>
               `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`
@@ -258,33 +326,50 @@ export const createWebTool = (config: WebAutomationConfig = {}) => {
 };
 
 /**
- * Creates a LangChain tool that calls an MCP (Model Context Protocol) server endpoint.
- * Follows MCP spec: POST {serverUrl}/tools/call with { name, arguments }
+ * Creates a LangChain tool that calls an MCP server using the proper MCP protocol
+ * (JSON-RPC 2.0 over Streamable HTTP with SSE support).
+ *
+ * Accepts a shared MCPClient instance so multiple tools from the same server
+ * reuse the same session.
  */
-export const createMCPClientTool = (config: MCPToolConfig) =>
+export const createMCPClientTool = (
+  config: MCPToolConfig,
+  client?: MCPClient
+) =>
   new DynamicStructuredTool({
     name: config.toolName,
     description: config.description,
     schema: config.inputSchema,
     func: async (input: any) => {
       try {
-        const response = await fetch(`${config.serverUrl}/tools/call`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(config.authHeaders || {}),
-          },
-          body: JSON.stringify({ name: config.toolName, arguments: input }),
-          signal: AbortSignal.timeout(config.timeoutMs || 30000),
-        });
+        const mcpClient =
+          client ||
+          new MCPClient({
+            serverUrl: config.serverUrl,
+            authHeaders: config.authHeaders,
+            timeoutMs: config.timeoutMs,
+          });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          return `MCP tool error (${response.status}): ${errorText}`;
+        const result = await mcpClient.callTool(config.toolName, input);
+
+        if (result.isError) {
+          const errorText = result.content
+            .map((c) => c.text || "")
+            .join("\n");
+          return `MCP tool error: ${errorText}`;
         }
 
-        const result = await response.json();
-        return typeof result === "string" ? result : JSON.stringify(result);
+        // Concatenate all text content from the response
+        const output = result.content
+          .map((c) => {
+            if (c.type === "text") return c.text || "";
+            if (c.type === "image")
+              return `[Image: ${c.mimeType || "image"}]`;
+            return JSON.stringify(c);
+          })
+          .join("\n");
+
+        return output || "Tool executed successfully (no output)";
       } catch (error: any) {
         if (error.name === "TimeoutError" || error.name === "AbortError") {
           return `MCP tool call timed out after ${config.timeoutMs || 30000}ms`;
@@ -296,28 +381,25 @@ export const createMCPClientTool = (config: MCPToolConfig) =>
 
 /**
  * Discover available tools from an MCP server.
- * Calls GET {serverUrl}/tools/list per MCP spec.
+ * Uses the proper MCP protocol: JSON-RPC 2.0 with initialize handshake.
  * @returns Array of discovered tool definitions
  */
 export async function discoverMCPTools(
   serverUrl: string,
   authHeaders?: Record<string, string>
 ): Promise<MCPDiscoveredTool[]> {
-  const response = await fetch(`${serverUrl}/tools/list`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(authHeaders || {}),
-    },
-    signal: AbortSignal.timeout(10000),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `MCP tool discovery failed (${response.status}): ${await response.text()}`
-    );
+  const client = new MCPClient({ serverUrl, authHeaders });
+  try {
+    return await client.listTools();
+  } finally {
+    await client.close();
   }
+}
 
-  const body = await response.json();
-  return body.tools || [];
+/**
+ * Create an MCPClient instance for reuse across multiple tool calls.
+ * Call client.close() when done.
+ */
+export function createMCPClient(config: MCPClientConfig): MCPClient {
+  return new MCPClient(config);
 }

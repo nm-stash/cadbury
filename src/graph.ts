@@ -1,5 +1,5 @@
 import { RunnableConfig } from "@langchain/core/runnables";
-import { createAgent } from "./agent";
+import { createAgent, createAgentLoop } from "./agent";
 import { CadburyChain } from "./cadbury";
 import {
   createTavilyTool,
@@ -60,7 +60,7 @@ export class CadburyWorkflow {
 
   /**
    * Execute a single agent directly without supervisor routing.
-   * Bypasses the multi-agent orchestration for simpler, faster execution.
+   * Uses a custom ReAct loop with full chain-of-thought observability.
    * Ideal for user-created agents with pre-defined tool sets.
    */
   public async runAgentDirectly(
@@ -71,31 +71,35 @@ export class CadburyWorkflow {
     const startTime = Date.now();
     this.cadburyChain.costTracker.reset();
 
-    const agent = await createAgent(
+    const agentLoop = await createAgentLoop(
       this.llm,
       agentConfig.tools || [],
       agentConfig.systemPrompt,
       {
         onToolCall: options?.onToolCall,
+        onThinking: options?.onThinking,
+        onToolResult: options?.onToolResult,
+        onFrame: options?.onFrame,
         maxIterations: options?.maxIterations,
       }
     );
 
-    const result = await agent.invoke({
-      messages: [new HumanMessage({ content: message })],
+    // Build message history: convert ConversationMessage[] to proper BaseMessage objects
+    const historyMessages: any[] = (options?.conversationHistory || []).map(
+      (msg) =>
+        msg.role === "user"
+          ? new HumanMessage({ content: msg.content })
+          : new AIMessage({ content: msg.content })
+    );
+    // Append the current user message
+    historyMessages.push(new HumanMessage({ content: message }));
+
+    const result = await agentLoop.invoke({
+      messages: historyMessages,
     });
 
-    const output =
-      result.output ||
-      (result.messages && result.messages.length > 0
-        ? typeof result.messages[result.messages.length - 1].content ===
-          "string"
-          ? result.messages[result.messages.length - 1].content
-          : JSON.stringify(result.messages[result.messages.length - 1].content)
-        : "");
-
-    // Extract tool calls from intermediate steps
-    const toolCalls = (result.intermediateSteps || []).map((step: any) => ({
+    // Extract tool calls from intermediate steps (backward compatible format)
+    const toolCalls = (result.intermediateSteps || []).map((step) => ({
       tool: step.action?.tool || "unknown",
       toolInput: step.action?.toolInput || {},
       observation: typeof step.observation === "string"
@@ -104,10 +108,11 @@ export class CadburyWorkflow {
     }));
 
     return {
-      output,
+      output: result.output,
       cost: this.cadburyChain.costTracker.getTotalCost(),
       durationMs: Date.now() - startTime,
       toolCalls,
+      stack: result.stack,
     };
   }
 
