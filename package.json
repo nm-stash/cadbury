@@ -1,6 +1,6 @@
 {
   "name": "@nm-stash/cadbury",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": false,
   "description": "Greetings, esteemed developer! I am Cadbury, your trusty AI butler, inspired by the ever-diligent and resourceful butler of Richie Rich. I am here to serve you in the realm of code, utilizing the latest in Large Language Models (LLMs) to assist with various programming tasks. Whether it's debugging, writing code snippets, or providing insightful suggestions, you can count on me to make your development journey as smooth and efficient as possible. Just install me through npm, and let me take care of the rest. Your coding experience is about to become much more refined.",
   "main": "lib/index.js",
