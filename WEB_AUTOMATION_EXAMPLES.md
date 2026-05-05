@@ -5,7 +5,7 @@ This document provides comprehensive examples of using Cadbury's web automation 
 ## Basic Setup
 
 ```typescript
-import { createCadburyButler, runWorkflow } from "@supreme-observer/cadbury";
+import { createCadburyButler, runWorkflow } from "@nm-stash/cadbury";
 
 const butler = await createCadburyButler({
   openaiApiKey: "your-openai-api-key",

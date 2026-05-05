@@ -1,5 +1,5 @@
 {
-  "name": "@supreme-observer/cadbury",
+  "name": "@nm-stash/cadbury",
   "version": "1.2.1",
   "private": false,
   "description": "Greetings, esteemed developer! I am Cadbury, your trusty AI butler, inspired by the ever-diligent and resourceful butler of Richie Rich. I am here to serve you in the realm of code, utilizing the latest in Large Language Models (LLMs) to assist with various programming tasks. Whether it's debugging, writing code snippets, or providing insightful suggestions, you can count on me to make your development journey as smooth and efficient as possible. Just install me through npm, and let me take care of the rest. Your coding experience is about to become much more refined.",
@@ -30,7 +30,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/supreme-observer/cadbury.git"
+    "url": "git+https://github.com/nm-stash/cadbury.git"
   },
   "keywords": [
     "ai",
@@ -47,9 +47,9 @@
   "author": "Nikhil Mishra",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/supreme-observer/cadbury/issues"
+    "url": "https://github.com/nm-stash/cadbury/issues"
   },
-  "homepage": "https://github.com/supreme-observer/cadbury#readme",
+  "homepage": "https://github.com/nm-stash/cadbury#readme",
   "dependencies": {
     "@langchain/classic": "^1.0.0",
     "@langchain/core": "^1.1.18",

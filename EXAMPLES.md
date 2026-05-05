@@ -3,7 +3,7 @@
 ## Simple Usage
 
 ```typescript
-import { createCadburyButler, runWorkflow } from "@supreme-observer/cadbury";
+import { createCadburyButler, runWorkflow } from "@nm-stash/cadbury";
 
 const config = {
   openaiApiKey: process.env.OPENAI_API_KEY!,
@@ -25,7 +25,7 @@ if (response.chartUrls) {
 ## Streaming Example
 
 ```typescript
-import { streamWorkflow } from "@supreme-observer/cadbury";
+import { streamWorkflow } from "@nm-stash/cadbury";
 
 for await (const result of streamWorkflow(
   butler,
@@ -39,7 +39,7 @@ for await (const result of streamWorkflow(
 ## Custom Agent Example
 
 ```typescript
-import { createCustomAgent, createTavilyTool } from "@supreme-observer/cadbury";
+import { createCustomAgent, createTavilyTool } from "@nm-stash/cadbury";
 
 const workflow = await createCadburyButler(config);
 
