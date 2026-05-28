@@ -1,20 +1,17 @@
-import { ChatOpenAI } from "@langchain/openai";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { createLLM } from "./llm-factory";
 import { createAgent } from "./agent";
 import { createWebTool, createTavilyTool } from "./tools";
 import { CadburyConfig, TaskAnalysis, AgentCapability } from "./types";
 
 export class IntelligentAgentManager {
-  private llm: ChatOpenAI;
+  private llm: BaseChatModel;
   private config: CadburyConfig;
   private activeAgents: Map<string, any> = new Map();
 
   constructor(config: CadburyConfig) {
     this.config = config;
-    this.llm = new ChatOpenAI({
-      apiKey: config.openaiApiKey,
-      modelName: config.modelName || "gpt-3.5-turbo",
-      temperature: config.temperature || 0,
-    });
+    this.llm = createLLM(config);
   }
 
   async analyzeTask(userRequest: string): Promise<TaskAnalysis> {

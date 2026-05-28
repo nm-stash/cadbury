@@ -29,7 +29,8 @@ export interface TaskAnalysis {
 }
 
 export interface CadburyConfig {
-  openaiApiKey: string; // Required for core functionality
+  openaiApiKey?: string;
+  anthropicApiKey?: string;
   tavilyApiKey?: string;
   modelName?: string;
   temperature?: number;

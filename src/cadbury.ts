@@ -1,6 +1,6 @@
 import { END } from "@langchain/langgraph";
 import { JsonOutputToolsParser } from "@langchain/core/output_parsers/openai_tools";
-import { ChatOpenAI } from "@langchain/openai";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import {
   ChatPromptTemplate,
   MessagesPlaceholder,
@@ -8,6 +8,7 @@ import {
 import { CadburyConfig, PersonalityConfig, TaskAnalysis } from "./types";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { CostTracker } from "./cost-tracker";
+import { createLLM } from "./llm-factory";
 import { IntelligentAgentManager } from "./agent-manager";
 
 export class CadburyChain {
@@ -64,7 +65,7 @@ export class CadburyChain {
     ],
   ]);
 
-  public llm?: ChatOpenAI;
+  public llm?: BaseChatModel;
   private config: CadburyConfig;
   private personalityPrompt: string;
   private supervisorName: string;
@@ -79,13 +80,8 @@ export class CadburyChain {
     this.costTracker = new CostTracker(config.modelName || "gpt-3.5-turbo");
     this.agentManager = new IntelligentAgentManager(config);
 
-    // Only initialize LLM if API key is provided
-    if (config.openaiApiKey) {
-      this.llm = new ChatOpenAI({
-        apiKey: config.openaiApiKey,
-        modelName: config.modelName || "gpt-3.5-turbo",
-        temperature: config.temperature || 0,
-      });
+    if (config.openaiApiKey || config.anthropicApiKey) {
+      this.llm = createLLM(config);
     }
   }
 
@@ -309,7 +305,7 @@ You are direct, efficient, and focused on delivering results while maintaining a
       ],
     ]);
 
-    const llmWithTools = this.llm.bindTools([CadburyChain.toolDef]);
+    const llmWithTools = (this.llm as any).bindTools([CadburyChain.toolDef]);
     const chain = dynamicPrompt
       .pipe(llmWithTools)
       .pipe(new JsonOutputToolsParser())

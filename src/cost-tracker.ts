@@ -1,28 +1,7 @@
 import { CostInfo } from "./types";
+import { MODEL_PRICING_MAP } from "./models";
 
-// OpenAI pricing as of June 2024 (per 1M tokens)
-const MODEL_PRICING = {
-  "gpt-4": {
-    input: 30.0, // $30 per 1M input tokens
-    output: 60.0, // $60 per 1M output tokens
-  },
-  "gpt-4-turbo": {
-    input: 10.0, // $10 per 1M input tokens
-    output: 30.0, // $30 per 1M output tokens
-  },
-  "gpt-3.5-turbo": {
-    input: 0.5, // $0.50 per 1M input tokens
-    output: 1.5, // $1.50 per 1M output tokens
-  },
-  "gpt-4o": {
-    input: 5.0, // $5 per 1M input tokens
-    output: 15.0, // $15 per 1M output tokens
-  },
-  "gpt-4o-mini": {
-    input: 0.15, // $0.15 per 1M input tokens
-    output: 0.6, // $0.60 per 1M output tokens
-  },
-};
+const MODEL_PRICING = MODEL_PRICING_MAP;
 
 // OpenAI embedding pricing (per 1M tokens)
 const EMBEDDING_PRICING = {

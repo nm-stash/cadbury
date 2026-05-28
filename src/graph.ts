@@ -10,7 +10,7 @@ import { createWebAgent } from "./web-agent";
 import { AgentStateChannels, agentStateChannels } from "./state";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { START, StateGraph, END } from "@langchain/langgraph";
-import { ChatOpenAI } from "@langchain/openai";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import {
   CadburyConfig,
   AgentConfig,
@@ -21,7 +21,7 @@ import {
 type NodeName = "cadbury" | "web_agent" | "researcher" | string;
 
 export class CadburyWorkflow {
-  private llm: ChatOpenAI;
+  private llm: BaseChatModel;
   private workflow: any;
   private cadburyChain: CadburyChain;
   private config: CadburyConfig;
@@ -35,7 +35,7 @@ export class CadburyWorkflow {
     this.cadburyChain = new CadburyChain(config);
 
     if (!this.cadburyChain.llm) {
-      throw new Error("OpenAI API key is required for CadburyWorkflow");
+      throw new Error("An API key (openaiApiKey or anthropicApiKey) is required for CadburyWorkflow");
     }
     this.llm = this.cadburyChain.llm;
   }

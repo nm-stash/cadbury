@@ -42,6 +42,9 @@ import {
   MCPDiscoveredTool,
 } from "./types";
 import { CostTracker } from "./cost-tracker";
+import { getModels, MODEL_REGISTRY } from "./models";
+export type { ModelDefinition, AgentModel } from "./models";
+export { getModels, MODEL_REGISTRY };
 import { createWebAutomationTool } from "./web-automation";
 import { createWebAgent } from "./web-agent";
 import { createEmbeddings, processPDFWithEmbeddings } from "./pdf-processor";
