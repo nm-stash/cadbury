@@ -77,7 +77,7 @@ export class CadburyChain {
     this.config = config;
     this.supervisorName = config.personality?.supervisorName || "Cadbury";
     this.personalityPrompt = this.generatePersonalityPrompt(config.personality);
-    this.costTracker = new CostTracker(config.modelName || "gpt-3.5-turbo");
+    this.costTracker = new CostTracker(config.modelName || "gpt-4o-mini");
     this.agentManager = new IntelligentAgentManager(config);
 
     if (config.openaiApiKey || config.anthropicApiKey) {

@@ -74,7 +74,7 @@ export class CostTracker {
   private calculateCost(inputTokens: number, outputTokens: number): number {
     const pricing =
       MODEL_PRICING[this.model as keyof typeof MODEL_PRICING] ||
-      MODEL_PRICING["gpt-3.5-turbo"];
+      MODEL_PRICING["gpt-4o-mini"];
 
     const inputCost = (inputTokens / 1_000_000) * pricing.input;
     const outputCost = (outputTokens / 1_000_000) * pricing.output;
